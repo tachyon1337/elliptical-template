@@ -1,0 +1,5 @@
+[
+    "node_modules/elliptical-dustjs/dist/elliptical-dust.js",
+    "./lib/template.js"
+
+]
