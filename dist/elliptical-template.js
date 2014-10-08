@@ -36,6 +36,11 @@
          * @private
          */
         _initElement:function(){
+            this.options.setVisibility=this.options.setVisibility || true;
+            this.options.templateBind=this.options.templateBind || true;
+            if(this.options.templateBind==='false'){
+                this.options.templateBind=false;
+            }
             this._data.Running=null;
             this._data.unlockInterval=300;
             this._data._intervalId=null;
@@ -51,7 +56,7 @@
             this._data.modelNodeSelector=(!__customElements) ? '[data-node="model"]' : 'ui-model';
             this._data.attrId=(!__customElements) ? 'data-id' : 'model-id';
             var template=this.__getTemplateNode();
-            if(template[0]){
+            if(template[0] && this.options.templateBind){
                 this._data.templateNode=template;
                 this.__onScriptsLoaded();
             }
@@ -82,10 +87,11 @@
             var template=this._data.templateNode;
             this.__initTemplate(template);
             this.__initDOMObserver(template[0]);
+            var redraw=this.options.autoRender;
             if(this.__isModelList()){
-                (this.__scopeLength() > 0) ? this.__databind(template,repeat) : this.__watch(template,true,repeat);
+                (this.__scopeLength() > 0) ? this.__databind(template,repeat,redraw) : this.__watch(template,true,repeat);
             }else{
-                (!_.isEmpty(this.$scope)) ? this.__databind(template,repeat) : this.__watch(template,false,repeat);
+                (!_.isEmpty(this.$scope)) ? this.__databind(template,repeat,redraw) : this.__watch(template,false,repeat);
             }
         },
 
@@ -99,11 +105,12 @@
         __watch:function(template,isArray,repeat){
             var self=this;
             this._data._watched=true;
+            var redraw=this.options.autoRender;
             this._data.intervalId=setInterval(function(){
                 if((isArray && self.__scopeLength() > 0 ) || (!isArray && !_.isEmpty(self.$scope))){
                     self._data._watched=false;
                     clearInterval(self._data.intervalId);
-                    self.__databind(template,repeat);
+                    self.__databind(template,repeat,redraw);
                 }
             },100);
         },
@@ -134,7 +141,13 @@
                 }
 
             }else if(typeof name !=='undefined'){
+                this._data.templateId=name;
+                fragment=this.__getFragmentByName();
+                this._data.fragment=fragment;
 
+                if(fragment){
+                    this.__parseTemplateFragment(fragment);
+                }
             }
         },
 
@@ -184,6 +197,14 @@
             });
 
             return fragment;
+        },
+
+        __getFragmentByName:function(){
+            var templateNode=this._data.templateNode;
+            if(this.options.bindHTML5Imports){
+                this._renderElementTemplateImports(templateNode);
+            }
+            return templateNode.html();
         },
 
         /**
@@ -409,6 +430,8 @@
             /* unlock observer callbacks */
             this.__unlock();
 
+            self.__setVisibility(template);
+
         },
 
         /**
@@ -439,9 +462,14 @@
          */
         __renderTemplate:function(opts,callback){
             var self=this;
+            var templateNode=this._data.templateNode;
+            var scope=this.$scope;
             this._renderTemplate(opts,function(err,out){
                 var html=out.replace(/<ui-template(.*?)>/g,'').replace(/<\/ui-template>/g,'');
                 self._data.templateNode.html(html);
+                if(self.options.bindHTML5Imports){
+                    self._renderElementTemplateImports(templateNode,scope);
+                }
                 if(callback){
                     callback(err,out);
                 }
@@ -457,8 +485,6 @@
             if(this._data._setDiscardBit){
                 this._data._discard=true;
             }
-
-
         },
 
         /**
@@ -477,6 +503,21 @@
 
             },unlockInterval);
         },
+
+        __setVisibility:function(template){
+            if(this.options.autoRender && this.options.setVisibility===true){
+                this._setVisibility(template);
+            }
+        },
+
+        _setVisibility:function(template){
+            if(template===undefined){
+                template=this._data.templateNode;
+            }
+            template.addClass('visible');
+        },
+
+
 
         /**
          * two-way binds a model to the template DOM fragment
@@ -569,7 +610,6 @@
                     }
                 }
                 return depth;
-
             }
 
 
@@ -686,7 +726,6 @@
                 if(node.nodeType !==3 && node.hasAttributes() || (node.tagName && node.tagName.toLowerCase()==='ui-model')){
                     parseNodeAttributes(node);
                 }
-
             }
 
             /**
@@ -700,7 +739,6 @@
                     id='id';
                 }
                 var key,keys,attr;
-
                 $.each(node.attributes,function(i,attribute){
                     try{
                         if(attribute && attribute!==undefined){
@@ -726,7 +764,6 @@
                     }catch(ex){
                         console.log(ex);
                     }
-
                 });
 
 
@@ -734,22 +771,6 @@
                 if(node.tagName && node.tagName.toLowerCase()==='ui-model'){
                     setData(node);
                 }
-
-
-                /**
-                 *bind an attribute name/value pair
-                 * @param val {String} colon separated string(name:value)
-                 * @private
-                 */
-                /*function _bindAttributeObserver(val){
-                    var arr=val.split(':');
-                    if(arr.length){
-                        var attr=arr[0].trim();
-                        var key=arr[1].trim();
-                        bindAttributeObserver(node,attr,key);
-                    }
-                }*/
-
             }
 
             /**
@@ -803,7 +824,6 @@
                 };
 
                 pathObservers.push(observer_);
-
             }
 
             /**
@@ -877,8 +897,6 @@
                 };
 
                 pathObservers.push(observer_);
-
-
             }
 
             /* parse a stringified function into method name + arg list */
@@ -990,7 +1008,6 @@
             node.appendChild(text);
 
             return text;
-
         },
 
         /**
@@ -1001,7 +1018,6 @@
         __getTemplateContextArray:function(){
             var contextKeyArray=this._data.contextKeyArray;
             return (contextKeyArray && contextKeyArray.length > 0) ? contextKeyArray[contextKeyArray.length -1] : [];
-
         },
 
         /**
@@ -1024,7 +1040,6 @@
 
             (typeof key !=='undefined') ? path+=key : path=path.substring(0, path.length - 1);
             return path;
-
         },
 
         /**
@@ -1214,8 +1229,6 @@
                 this._data._discard=false;
                 this._data._setDiscardBit=false;
                 arr.splice(index,1);
-
-
             }
         },
 
@@ -1228,7 +1241,6 @@
          */
         __parsePath:function(path,index){
             return path.substring(0, path.length - (index.toString().length + 1));
-
         },
 
 
@@ -1252,7 +1264,6 @@
             if(result.removed && result.removed.length && result.removed.length > 0) {
                 this.__onRemoved(result.removed)
             }
-
             this._onScopeChange(result);
         },
 
@@ -1512,7 +1523,6 @@
             prop.position= _.indexOf(arr,section);
 
             return prop;
-
         },
 
 
@@ -1548,7 +1558,6 @@
             });
 
             return cxtArray;
-
         },
 
 
@@ -1588,7 +1597,6 @@
             }
 
             this.__rebind();
-
         },
 
         _fragmentModelParser:function(fragment){
@@ -1664,7 +1672,6 @@
             if(DOMObserver){
                 DOMObserver.disconnect();
             }
-
         },
 
         /**
@@ -1729,7 +1736,6 @@
                 if(template[0]){
                     var node=template[0];
                     observer.observe(node, {childList: true,subtree:true});
-
                 }
             }
         },
@@ -1849,7 +1855,6 @@
 
                 })
             }
-
         },
 
         /**
@@ -1921,8 +1926,6 @@
                     })
                 }
             }
-
-
         },
 
         $empty:function(){
